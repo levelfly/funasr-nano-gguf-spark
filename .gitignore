@@ -1,2 +1,5 @@
+__pycache__/
+*.pyc
 llama-libs/
 models/
+fun_asr_gguf/inference/bin/
