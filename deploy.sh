@@ -115,11 +115,19 @@ SERVEREOF
 echo ""
 echo "=== 部署完成！==="
 echo ""
-echo "啟動指令："
-echo "  export LD_LIBRARY_PATH=~/funasr-env/lib/python3.12/site-packages/nvidia/cudnn/lib:~/funasr-env/lib/python3.12/site-packages/nvidia/cuda_runtime/lib:\$LD_LIBRARY_PATH"
-echo "  nohup ~/funasr-env/bin/python ~/funasr_gguf_server.py > ~/funasr-gguf-server.log 2>&1 &"
+echo "啟動指令：（使用 wrapper 腳本，自動設定 cuDNN 路徑）"
+echo "  nohup ~/start_gguf_asr.sh > ~/funasr_gguf_server.log 2>&1 &"
 echo ""
 echo "測試："
 echo "  curl -X POST http://localhost:8104/v1/audio/transcriptions -F 'file=@test.wav' -F 'language=zh'"
 echo ""
 echo "效能：每段音檔約 0.29 秒，比 PyTorch 版快 7 倍"
+
+# 7. 建立啟動 wrapper 腳本（解決重開機後 LD_LIBRARY_PATH 遺失問題）
+echo "[7/7] 建立啟動腳本..."
+cat > ~/start_gguf_asr.sh << 'WRAPEOF'
+#!/bin/bash
+export LD_LIBRARY_PATH=/home/jayter/funasr-env/lib/python3.12/site-packages/nvidia/cudnn/lib:/home/jayter/funasr-env/lib/python3.12/site-packages/nvidia/cuda_runtime/lib:$LD_LIBRARY_PATH
+exec /home/jayter/funasr-env/bin/python /home/jayter/funasr_gguf_server.py
+WRAPEOF
+chmod +x ~/start_gguf_asr.sh
