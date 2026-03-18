@@ -1,25 +1,26 @@
-# Stage 1: Build llama.cpp
-FROM nvidia/cuda:12.4.0-devel-ubuntu22.04 AS builder
-RUN apt-get update && apt-get install -y --no-install-recommends git cmake build-essential && rm -rf /var/lib/apt/lists/*
-RUN git clone --depth 1 https://github.com/ggml-org/llama.cpp.git /tmp/llama.cpp     && cd /tmp/llama.cpp     && cmake -B build -DGGML_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES=70 -DCUDA_CUDA_LIBRARY=/usr/local/cuda/lib64/stubs/libcuda.so     && cmake --build build --config Release -j2 --target ggml llama mtmd     && mkdir -p /out && cp -a /tmp/llama.cpp/build/bin/lib*.so* /out/
-
-# Stage 2: Runtime
 FROM nvidia/cuda:12.4.0-runtime-ubuntu22.04
-RUN apt-get update && apt-get install -y --no-install-recommends     python3 python3-pip python3-venv ca-certificates ffmpeg libgomp1 curl unzip     && rm -rf /var/lib/apt/lists/*
+
+RUN apt-get update && apt-get install -y --no-install-recommends     python3 python3-pip python3-venv git cmake build-essential ca-certificates ffmpeg libgomp1 curl     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
+
 RUN python3 -m venv /app/venv
 ENV PATH=/app/venv/bin:$PATH
 
-RUN pip install --no-cache-dir     onnxruntime-gpu==1.19.2 nvidia-cudnn-cu12==9.10.2.21     gguf pypinyin watchdog srt pydub rich fastapi uvicorn python-multipart
+# x86_64: onnxruntime-gpu from PyPI (no custom wheel needed)
+RUN pip install --no-cache-dir     onnxruntime-gpu     gguf pypinyin watchdog srt pydub rich fastapi uvicorn python-multipart
 
-COPY --from=builder /out/ /app/bin/
+# Build llama.cpp for SM70 (V100)
+RUN git clone --depth 1 https://github.com/ggml-org/llama.cpp.git /tmp/llama.cpp     && cd /tmp/llama.cpp     && cmake -B build -DGGML_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES=70     && cmake --build build --config Release -j$(nproc)     && mkdir -p /app/bin && cp -a /tmp/llama.cpp/build/bin/lib*.so* /app/bin/     && rm -rf /tmp/llama.cpp
 
-ENV LD_LIBRARY_PATH=/app/bin:/app/fun_asr_gguf/inference/bin:/app/venv/lib/python3.10/site-packages/nvidia/cudnn/lib:/app/venv/lib/python3.10/site-packages/nvidia/cuda_runtime/lib:/app/venv/lib/python3.10/site-packages/nvidia/cublas/lib:$LD_LIBRARY_PATH
+ENV LD_LIBRARY_PATH=/app/bin:/app/fun_asr_gguf/inference/bin:$LD_LIBRARY_PATH
 
+# Download model
 RUN curl -L -o /tmp/model.zip "https://github.com/HaujetZhao/CapsWriter-Offline/releases/download/models/Fun-ASR-Nano-GGUF.zip"     && mkdir -p /app/models && unzip -o /tmp/model.zip -d /app/models     && if [ -d /app/models/Fun-ASR-Nano-GGUF ]; then mv /app/models/Fun-ASR-Nano-GGUF/* /app/models/ 2>/dev/null; rmdir /app/models/Fun-ASR-Nano-GGUF 2>/dev/null; fi     && rm /tmp/model.zip
 
+# Patched inference code (from repo, not upstream)
 COPY fun_asr_gguf/ /app/fun_asr_gguf/
+
 RUN mkdir -p /app/fun_asr_gguf/inference/bin     && for f in /app/bin/lib*.so; do ln -sf "$f" /app/fun_asr_gguf/inference/bin/; done
 
 COPY funasr_gguf_server.py /app/funasr_gguf_server.py
