@@ -71,6 +71,7 @@ async def transcribe(
     model: Optional[str] = Form(None),
     language: Optional[str] = Form(None),
     prompt: Optional[str] = Form(None),
+    context: Optional[str] = Form(None),
 ):
     suffix = os.path.splitext(file.filename or ".wav")[1] or ".wav"
     with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as f:
@@ -94,7 +95,7 @@ async def transcribe(
 
         preprocessed = preprocess_audio(tmp_input)
         t0 = time.time()
-        result = engine.transcribe(preprocessed, language=language, verbose=False)
+        result = engine.transcribe(preprocessed, language=language, context=context, verbose=False)
         elapsed = time.time() - t0
 
         text = result.text or ""
